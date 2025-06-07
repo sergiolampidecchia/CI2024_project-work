@@ -4,9 +4,11 @@
 
 ### Goal of the Lab
 The goal of the first lab was to solve the Set Cover Problem.
+
 The Set Cover Problem is a combinatorial optimization problem. 
 Given a universe of elements and a collection of subsets whose union covers the entire universe, the goal is to find the smallest possible number of subsets that still cover all elements in the universe.
 It is known to be NP-hard, meaning there is no known efficient algorithm to solve all instance optimally.
+
 We tried solving it using two local search algorithms.
 - **Hill Climbing**: a simple algorithm that keeps improving the solution step by step. It often gets stuck in a local minimum (a solution that looks good, but it isn't the best overall).
 - **Simulated Annealing**: an algorithm that sometimes accepts worse solutions (especially at the beginning). This helps it explore more and avoid getting trapped in a local minimum.
@@ -14,6 +16,10 @@ We tried solving it using two local search algorithms.
 In summary, Simulated Annealing works better for this kind of problem because it avoids getting stuck and keeps looking for better global solutions.
 
 ### Helper Functions
+- `valid(solution)`: checks whether the given solution is valid by verifying if it covers the entire universe of elements.
+
+- `cost(solution)`: computes the total cost of the solution by summing the costs of all selected sets.
+
  ```python
 def valid(solution):
     return np.all(np.logical_or.reduce(SETS[solution]))
@@ -22,10 +28,21 @@ def cost(solution):
     return COSTS[solution].sum()
 ```
 
-- `valid(solution)`: checks whether the given solution is valid by verifying if it covers the entire universe of elements.
-- `cost(solution)`: computes the total cost of the solution by summing the costs of all selected sets.
-
 ### Simulated Annealing Algorithm
+This section presents the implementation of the Simulated Annealing algorithm. 
+
+The initial `current_solution` is generated randomly. 
+If the total number of sets (`num_sets`) is less than 1000, all sets are included in the initial solution to promote slower convergence and produce a more meaningful plot. 
+Otherwise, each set is included with a 50% probability.
+
+Simulated Annealing is a probabilistic optimization technique that allows the exploration of suboptimal solutions in order to escape local minima. The acceptance of worse solutions is governed by the following exponential probability function:
+\[ P = \exp\left(-\frac{\Delta \text{cost}}{\text{temperature}}\right) \]
+This function increases the likelihood of accepting worse solutions at higher temperatures and reduces it as the temperature decreases, encouraging global exploration early and local refinement later.
+
+**Components**
+- **Temperature** - `temperature`: a control parameter that influences the likelihood of accepting worse solutions. It starts high to allow broad exploration and decreases gradually, reducing randomness and leading the algorithm toward convergence.
+- **Cooling Rate** - `cooling_rate`: a factor used to decrement the temperature after each iteration. Typically set just below 1 (e.g., 0.995). It ensures a smooth and steady cooling process.
+- **Cost Difference** - `new_cost - current_cost`: the difference in cost between the proposed solution and the current one. A positive value indicates a worse solution, which may still be accepted depending on the current temperature.
  ```python
 def simulated_annealing(sets, costs, num_sets, density, rng, initial_temp=1000.0, cooling_rate=0.995, min_temp=1e-6, max_iter=20_000):
     if num_sets < 1000:
@@ -71,19 +88,6 @@ def simulated_annealing(sets, costs, num_sets, density, rng, initial_temp=1000.0
 
     return best_solution, best_cost, history
 ```
-
-This section presents the implementation of the Simulated Annealing algorithm. 
-The initial `current_solution` is generated randomly. 
-If the total number of sets (`num_sets`) is less than 1000, all sets are included in the initial solution to promote slower convergence and produce a more meaningful plot. Otherwise, each set is included with a 50% probability.
-
-Simulated Annealing is a probabilistic optimization technique that allows the exploration of suboptimal solutions in order to escape local minima. The acceptance of worse solutions is governed by the following exponential probability function:
-\[ P = \exp\left(-\frac{\Delta \text{cost}}{\text{temperature}}\right) \]
-This function increases the likelihood of accepting worse solutions at higher temperatures and reduces it as the temperature decreases, encouraging global exploration early and local refinement later.
-
-**Components**
-- **Temperature** - `temperature`: a control parameter that influences the likelihood of accepting worse solutions. It starts high to allow broad exploration and decreases gradually, reducing randomness and leading the algorithm toward convergence.
-- **Cooling Rate** - `cooling_rate`: a factor used to decrement the temperature after each iteration. Typically set just below 1 (e.g., 0.995). It ensures a smooth and steady cooling process.
-- **Cost Difference** - `new_cost - current_cost`: the difference in cost between the proposed solution and the current one. A positive value indicates a worse solution, which may still be accepted depending on the current temperature.
 
 ### Results
 These are the results with `initial_temp=1000.0, cooling_rate=0.995, min_temp=1e-6, max_iter=20_000`. To improve the settlement of the cost values ​​it would be better to further decrease the `min_temp` (value of the minimum temperature) especially in cases where the universe size is 100,000.
@@ -141,11 +145,29 @@ Overall, you've done a solid work, great job!
 ## Laboratory 2 - Travelling Salesman Problem 
 ### Goal of the Lab
 The goal of this lab is to solve the Travelling Salesman Problem (TSP).
+
 The TSP is an optimization problem. Given a list of cities and the distances between each pair of them, the goal is to find the shortest possible route that starts and ends at the same city and visits each city exactly once.
+
 We tried solving it using a combination of Evolutionary Algorithm (which evolves the initial populations through selection, crossover, and mutation) and Simulated Annealing. 
+
 The initial population is created using a greedy approach based on the Nearest Neighbour heuristic. This heuristic builds a solution by starting from a random city and repeatedly visiting the nearest city until the tour is complete. Although it does not guarantee an optimal result it quickly provides reasonably good solutions that serve as a solid foundation for further optimization.
 
 ### Helper Functions
+- `tsp_cost(tsp)`: validates whether the selected path starts and ends at the same city and includes all cities listed in the input CSV file. It then computes the total cost by summing the distances between consecutive cities along the path.
+
+- `Individual`: class which represents a candidate solution for the TSP. 
+It has two attributes: 
+    - `genome`: defines the sequence of visited cities.
+    - `fitness`: is the inverse of the path cost (used for optimization purposes).
+
+- `parent_selection(population)`: randomly selects a parent individual from the current population for reproduction.
+
+- `xover(p1: Individual, p2: Individual)`: a crossover operator that combines the genomes of two parents to generate an offspring. It first copies a random subsequence from the first parent (`p1`) into the child genome, then fills in the remaining genes with cities from the second parent (`p2`), preserving their order and avoiding duplicates.
+
+- `cycle_crossover(p1_genome, p2_genome)`: with a 50% probability, this function is invoked as an alternative crossover method. It applies the cyclic crossover technique, which ensures that the child inherits genetic material from both parents while preserving the relative order of cities from `p1`.
+
+- `mutation(p: Individual)`: randomly selects a segment of the genome (with length between 3 and 5), generates all possible inversions of the segment, and, with 30% probability, perform a shift of the segment to introduce variation.
+
 ```python
 def tsp_cost(tsp):
     assert tsp[0] == tsp[-1]
@@ -223,19 +245,13 @@ def mutation(p: Individual):
 
     return Individual(new_genome)
  ```   
-- `tsp_cost(tsp)`: validates whether the selected path starts and ends at the same city and includes all cities listed in the input CSV file. It then computes the total cost by summing the distances between consecutive cities along the path.
-- `Individual`: class which represents a candidate solution for the TSP. 
-It has two attributes: 
-    - `genome`: defines the sequence of visited cities.
-    - `fitness`: is the inverse of the path cost (used for optimization purposes).
-- `parent_selection(population)`: randomly selects a parent individual from the current population for reproduction.
-- `xover(p1: Individual, p2: Individual)`: a crossover operator that combines the genomes of two parents to generate an offspring. It first copies a random subsequence from the first parent (`p1`) into the child genome, then fills in the remaining genes with cities from the second parent (`p2`), preserving their order and avoiding duplicates.
-- `cycle_crossover(p1_genome, p2_genome)`: with a 50% probability, this function is invoked as an alternative crossover method. It applies the cyclic crossover technique, which ensures that the child inherits genetic material from both parents while preserving the relative order of cities from `p1`.
-- `mutation(p: Individual)`: randomly selects a segment of the genome (with length between 3 and 5), generates all possible inversions of the segment, and, with 30% probability, perform a shift of the segment to introduce variation.
 
 ### Greedy Inizialization
 To generate a strong starting population, two greedy heuristic are used.
 - #### Greedy Nearest Neighbor
+    Greedy Nearest Neighbor method starts from an arbitrary city and always selects the closest unvisited city as the next step. 
+    Although fast, it may produce suboptimal routes due to its greedy nature.
+
     ```python
     def greedy_nearest_neighbor():
         visited = np.full(len(CITIES), False)
@@ -260,8 +276,10 @@ To generate a strong starting population, two greedy heuristic are used.
         logging.info(f"result: Found a path of {len(tsp)-1} steps, total length {tsp_cost(tsp):.2f}km")
         return Individual(tsp)
     ```
-    This method starts from an arbitrary city and always selects the closest unvisited city as the next step. Although fast, it may produce suboptimal routes due to its greedy nature.
+
 - #### Greedy MST-Based Heuristic 
+    Greedy MST-Based method builds a route using edges selected in increasing order of distance while avoiding cycles until all cities are visited.
+
     ```python
     def cyclic(edges):
         G = nx.Graph()
@@ -295,8 +313,23 @@ To generate a strong starting population, two greedy heuristic are used.
 
         return Individual(tsp)
     ```
-    This method builds a route using edges selected in increasing order of distance while avoiding cycles until all cities are visited.
 ### Evolutionary Algorithm
+To effectively solve the Travelling Salesman Problem (TSP) for a large number of cities, it is beneficial to use a high value for both `POPULATION_SIZE` and `OFFSPRING_SIZE`, ensuring sufficient diversity and exploration in the search space.
+
+The core of the algorithm is implemented in the `evolve()` function, which takes the following arguments:
+- **Population** - `population`: a list of individuals, where each individual represents a candidate path (genome) along with its associated fitness score.
+- **Maximum Numbers of Generations** - `generations`: the maximum number of generations to run the evolutionary process.
+- **Mutation Rate** - `mutation_rate`: the initial probability that a given individual will undergo mutation.
+- **Simulated Annealing Decay Factor** - `cooling_rate`: a parameter used in the Simulated Annealing component to gradually reduce the probability of accepting worse solutions, thus balancing exploration and exploitation over time.
+- **Tolerance for No Improvement** - `stagnation_limit`: the maximum number of consecutive generations without improvement in the best fitness value. When the limit is reached, the mutation rate is increased to encourage diversity.
+- **Mutation Rate Adjustment** - `adaptive_increase`: the amount by which the mutation rate is increased once stagnation is detected.
+
+During each generation, new offspring are generated by either:
+- **mutation**: which randomly selects parent (based on the current mutation rate).
+- **crossover**: applied to two parents to produce a child genome. 
+
+To improve convergence, the algorithm is executed twice. 
+In the second run, the best solution found in the first execution is included in the initial population to guide the search towards promising regions of the solution space.
 ```python
 import matplotlib.pyplot as plt
 
@@ -391,20 +424,6 @@ best_path_final, history_final = evolve(
     adaptive_increase=0.1
 )
 ```
-To effectively solve the Travelling Salesman Problem (TSP) for a large number of cities, it is beneficial to use a high value for both `POPULATION_SIZE` and `OFFSPRING_SIZE`, ensuring sufficient diversity and exploration in the search space.
-The core of the algorithm is implemented in the `evolve()` function, which takes the following arguments:
-- **Population** - `population`: a list of individuals, where each individual represents a candidate path (genome) along with its associated fitness score.
-- **Maximum Numbers of Generations** - `generations`: the maximum number of generations to run the evolutionary process.
-- **Mutation Rate** - `mutation_rate`: the initial probability that a given individual will undergo mutation.
-- **Simulated Annealing Decay Factor** - `cooling_rate`: a parameter used in the Simulated Annealing component to gradually reduce the probability of accepting worse solutions, thus balancing exploration and exploitation over time.
-- **Tolerance for No Improvement** - `stagnation_limit`: the maximum number of consecutive generations without improvement in the best fitness value. When the limit is reached, the mutation rate is increased to encourage diversity.
-- **Mutation Rate Adjustment** - `adaptive_increase`: the amount by which the mutation rate is increased once stagnation is detected.
-
-During each generation, new offspring are generated by either:
-- **mutation**: which randomly selects parent (based on the current mutation rate).
-- **crossover**: applied to two parents to produce a child genome. 
-
-To improve convergence, the algorithm is executed twice. In the second run, the best solution found in the first execution is included in the initial population to guide the search towards promising regions of the solution space.
 
 ### Results
 In order to solve the TSP problem I have implemented a solution with an Evolutionary Algorithm with the Simulated Annealing. These are the results with `generations = 200_000, mutation_rate = 0.3, initial_temperature = 10_000.0, cooling_rate = 0.995, stagnation_limit = 5_000, adaptive_increase = 0.1` for the five cities file in cvs format.
@@ -453,11 +472,20 @@ The code is neatly arranged. It makes good use of libraries like geopy and netwo
 
 ### Goal of the Lab
 This lab focuses on solving the n-puzzle problem. 
+
 The n-puzzle problem is a sliding tile puzzle that consists of a grid with n numbered tiles and one empty space (represented by 0). The goal is to rearrange the tiles into a specific order, usually increasing from left to right and top to bottom by sliding tiles into the empty space.
+
 We tried solving it using the A* Search Algorithm. The approach combines a cost-based search strategy with a custom heuristic that merges Manhattan distance and the number of misplaced tiles, both of which are admissible heuristics.
+
 The A* algorithm finds the shortest path from a start state to a goal state. It works by combining the actual cost to reach the current state and a heuristic estimate of the cost to reach the goal. It selects the next state to explore based on the lowest total estimated cost.
 
 ### Helper Functions
+- `available_actions(state: np.ndarray)`: returns a list of all possible moves from the current position of the empty tile (blank space), based on the puzzle's boundaries.
+- `do_action(state: np.ndarray, action: tuple)`: executes a given move on the current puzzle state and returns the resulting new state after the move.
+- `optimized_heuristic(state: np.ndarray, goal: np.ndarray)`: calculates an estimate of the remaining cost to reach the goal state. This is done by combining two metrics: the Manhattan distance and the number of misplaced tiles.
+
+These functions are utilized within `solve_puzzle()`, which implements the A* search algorithm to find the optimal solution path to the puzzle.
+
 ```python
 PUZZLE_DIM = 7  
 RANDOMIZE_STEPS = 150
@@ -495,13 +523,11 @@ def optimized_heuristic(state: np.ndarray, goal: np.ndarray) -> int:
 
     return manhattan_distance + 2 * misplacement_count
 ```
-- `available_actions(state: np.ndarray)`: returns a list of all possible moves from the current position of the empty tile (blank space), based on the puzzle's boundaries.
-- `do_action(state: np.ndarray, action: tuple)`: executes a given move on the current puzzle state and returns the resulting new state after the move.
-- `optimized_heuristic(state: np.ndarray, goal: np.ndarray)`: calculates an estimate of the remaining cost to reach the goal state. This is done by combining two metrics: the Manhattan distance and the number of misplaced tiles.
-
-These functions are utilized within `solve_puzzle()`, which implements the A* search algorithm to find the optimal solution path to the puzzle.
 
 ### A* Algorithm with Priority Queue
+This method solves the puzzle problem using the A* Algorithm with a priority queue. 
+The goal is to find the shortest path (in terms of moves) to get the puzzle from an initial state to a goal state.
+
 ```python
 def solve_puzzle(start_state: np.ndarray, goal_state: np.ndarray):
     frontier = PriorityQueue()
@@ -528,8 +554,6 @@ def solve_puzzle(start_state: np.ndarray, goal_state: np.ndarray):
 
     return None  
 ```
-This algorithm solves the puzzle problem using the A* algorithm with a priority queue. 
-The goal is to find the shortest path (in terms of moves) to get the puzzle from an initial state to a goal state.
 
 ### Results
 To create a realistic starting condition, the goal state is first scrambled using a sequence of valid random moves. This is done rather than generating a completely random grid, to ensure the puzzle is solvable.
@@ -564,51 +588,84 @@ Symbolic Regression's objective is to discover a mathematical expression that fi
 In this project, the GP algorithm uses parse trees to represent mathematical expression (each tree corresponds to a candidate function). The algorithm evolves these trees over time using processes inspired by biological evolution: selection, crossover (combining parts of two expressions) and mutation (randomly changing a part of an expression).
 The goal is to find an expression that closely approximates the input-output relationship in the dataset.
 
-### Tree Node Evalutation
+#### Tree Node Evalutation
+The function `evaluate_node(node, x)` is used to evaluate a symbolic expression represented as a parse tree (`TreeNode`). In this tree each node represents either an operation (addition, moltiplication, division, etc.) or a variable.
+
+This function computes the output of the expression tree rooted at a given node, using the input vector `x`, which contains the values assigned to each variable.
+So this function recursively traverses the tree and evaluates each node:
+
+- **Leaf Nodes**:
+    - If the node's value is a constant (integer or float), it returns an array filled with that constant.
+    - If the value is a variable (string found in the `VARIABLES` list), it retrieves the corresponding row from the input array `x` based on its position in `VARIABLES`.
+    - If the value is unrecognized, a `ValueError` is raised.
+- **Internal Nodes**:
+    - If the node has one child, it is assumed to be a unary operator and is applied using `apply_unary_safe()`.
+    - If the node has two children, it is treated as a binary operator and evaluated using `apply_binary_safe`.
+    - If the number of children is unsupported, an error is raised.
+
+**Error-Safe Function Application**
+- `apply_unary_safe(func, arr)`: safely applies a unary function to an array, catching and reporting any runtime errors.
+- `apply_binary_safe(func, arr1, arr2)`: applies a binary operator to two arrays, handling exceptions gracefully in case of invalid operations (e.g., division by zero).
+
+**Supported Operators**
+- `UNARY_OPERATORS` - `sin_fn`, `cos_fn`, `neg_fn`, `abs_fn`, `log_safe`, `sqrt_safe`, `exp_safe`: these are robust implementations of common mathematical functions. For example, `log_safe` avoids undefined values for non-positive inputs, and `exp_safe` prevents overflow by clipping extreme values.
+- `BINARY_OPERATORS` - `add_fn`, `sub_fn`, `mul_fn`, `div_safe`: includes basic arithmetic operations with `div_safe`, providing protection against division by near-zero values.
+
+**Modular Architecture**
+All the operational logic is defined in the `FUNCTION_LIBRARY` list, which contains dictionaries with the following keys:
+- `function`: a reference to the actual function implementation.
+- `arity`: the number of argument required (1 for unary, 2 for binary).
+- `weight`: the weight used during random tree generation.
+The lists `UNARY_OPERATORS` and `BINARY_OPERATORS` are dynamically filtered from this library.
+
 ```python
-def evaluate_children(node: Node, x: np.ndarray) -> np.ndarray:
+def evaluate_node(node: TreeNode, x: np.ndarray) -> np.ndarray:
+    """
+    Evaluate a TreeNode against the input data x.
+    """
     if node.is_leaf():
-        val = node.value
-        
-        if isinstance(val, (int, float)):
-            return np.full(x.shape[1], float(val))
-        
-        if isinstance(val, str) and val in VARIABLES:
-            try:
-                idx = VARIABLES.index(val)
-            except ValueError:
-                raise ValueError(f"Unknown Variable: {val}")
-            return x[idx, :]
-          
-        raise ValueError(f"Unknown leaf value: {val}")
+        return evaluate_leaf(node.value, x)
     
+    op_func = node.value
+    evaluated_children = [evaluate_node(child, x) for child in node.children]
+    if len(evaluated_children) == 1:
+        return apply_unary_safe(op_func, evaluated_children[0])
+    elif len(evaluated_children) == 2:
+        return apply_binary_safe(op_func, evaluated_children[0], evaluated_children[1])
     else:
-        op = node.value
-        children_values = [evaluate_children(child, x) for child in node.children]
+        raise ValueError(f"Unsupported number of children: {len(evaluated_children)}")
 
-        if len(children_values) == 1:
-            return safe_apply_unary(op, children_values[0])
-        elif len(children_values) == 2:
-            return safe_apply_binary(op, children_values[0], children_values[1])
-        else:
-            raise ValueError("Children number not supported")
+def evaluate_leaf(value: Any, x: np.ndarray) -> np.ndarray:
+    """
+    Evaluate a leaf node value against the input data x.
+    """
+    if isinstance(value, (int, float)):
+        return np.full(x.shape[1], float(value))
+    
+    if isinstance(value, str):
+        if value in VARIABLES:
+            return x[VARIABLES.index(value), :]
+        raise ValueError(f"Unknown Variable: {value}")
+    
+    raise ValueError(f"Unknown leaf value: {value}")
 
-def safe_apply_unary(func, arr):
+def apply_unary_safe(func, arr: np.ndarray) -> np.ndarray:
+    """
+    Apply a unary function safely, catching exceptions and returning a ValueError if it fails.
+    """
     try:
         return func(arr)
     except Exception as e:
         raise ValueError(f"Unary operator {func} failed with error: {e}") 
 
-def safe_apply_binary(func, arr1, arr2):
+def apply_binary_safe(func, arr1: np.ndarray, arr2: np.ndarray) -> np.ndarray:
+    """
+    Apply a binary function safely, catching exceptions and returning a ValueError if it fails.
+    """
     try:
         return func(arr1, arr2)
     except Exception as e:
         raise ValueError(f"Binary operator {func} failed with error: {e}") 
-
-
-DEPTH_MAX = 6
-CONST_MAX = 10
-CONST_MIN = -10
 
 def sin_fn(x): return np.sin(x)
 def cos_fn(x): return np.cos(x)
@@ -623,83 +680,114 @@ def sub_fn(a, b): return a - b
 def mul_fn(a, b): return a * b
 def div_safe(a, b): return np.where(np.abs(b) < 1e-12, 1.0, a / b)
 
-UNARY_FUNCS = [sin_fn, cos_fn, neg_fn, abs_fn, log_safe, sqrt_safe, exp_safe]
-BINARY_FUNCS = [add_fn, sub_fn, mul_fn, div_safe]        
+FUNCTION_LIBRARY = [
+    {'function': sin_fn, 'arity': 1, 'weight': 1.0},
+    {'function': cos_fn, 'arity': 1, 'weight': 1.0},
+    {'function': neg_fn, 'arity': 1, 'weight': 1.0},
+    {'function': abs_fn, 'arity': 1, 'weight': 1.0},
+    {'function': log_safe, 'arity': 1, 'weight': 1.0},
+    {'function': sqrt_safe, 'arity': 1, 'weight': 1.0},
+    {'function': exp_safe, 'arity': 1, 'weight': 1.0},
+    {'function': add_fn, 'arity': 2, 'weight': 1.0},
+    {'function': sub_fn, 'arity': 2, 'weight': 1.0},
+    {'function': mul_fn, 'arity': 2, 'weight': 1.0},
+    {'function': div_safe, 'arity': 2, 'weight': 1.0}
+]
+
+UNARY_OPERATORS = [f for f in FUNCTION_LIBRARY if f['arity'] == 1 and f['weight'] > 0]
+BINARY_OPERATORS = [f for f in FUNCTION_LIBRARY if f['arity'] == 2 and f['weight'] > 0]
 ```
-The evaluation of symbolic expressions represented as parse trees is performed through the `evaluate_children(node, x)` function. 
-This function computes the numerical output of the expression tree rooted at a given node, using the input vector x, which contains the values assigned to each variable.
-So this function recursively traverses the tree and evaluates each node:
-- **Leaf Nodes**:
-    - If the node's value is a constant (integer or float), it returns an array filled with that constant.
-    - If the value is a variable (string found in the `VARIABLES` list), it retrieves the corresponding row from the input array x based on its position in `VARIABLES`.
-    - If the value is unrecognized, a `ValueError` is raised.
-- **Internal Nodes**:
-    - If the node has one child, it is assumed to be a unary operator and is applied using `safe_apply_unary()`.
-    - If the node has two children, it is treated as a binary operator and evaluated using `safe_apply_binary`.
-    - If the number of children is unsupported, an error is raised.
 
-**Error-Safe Function Application**
-- `safe_apply_unary(func, arr)`: safely applies a unary function to an array, catching and reporting any runtime errors.
-- `safe_apply_binary(func, arr1, arr2)`: applies a binary operator to two arrays, handling exceptions gracefully in case of invalid operations (e.g., division by zero).
+### Random Tree Generation 
+To support symbolic regression, expression trees are randomly generated with a recursive structure.
 
-**Supported Operators**
-- `UNARY_FUNCS` - `sin_fn`, `cos_fn`, `neg_fn`, `abs_fn`, `log_safe`, `sqrt_safe`, `exp_safe`: these are robust implementations of common mathematical functions. For example, `log_safe` avoids undefined values for non-positive inputs, and `exp_safe` prevents overflow by clipping extreme values.
-- `BINARY_FUNCS` - `add_fn`, `sub_fn`, `mul_fn`, `div_safe`: includes basic arithmetic operations with `div_safe`, providing protection against division by near-zero values.
+- `create_subtree(depth, force_variable, ...)` creates a subtree with a specified depth:
+    - At depth 0, it generates either a constant or a variable. 
+    If `force_variable` is specified, it forces the use of a particular variable at the leaf.
+    Otherwise, it randomly chooses between a variable (from `VARIABLES`) and a numeric constant (uniformly sampled from [`CONST_MIN`, `CONST_MAX`])
+    - At depth > 0 , it probabilistically chosees between unary and binary functions.
+    With a given probability (e.g., 30%) a unary operator is selected from `UNARY_OPERATORS` and applied to one recursively generated child.
+    Otherwise, a binary operator is selected from `BINARY_OPERATORS` and applied to two recursively generated subtrees.
+- `generate_random_expression_tree(...)` generates a complete tree containing all required variables:
+    - In only one variable exists, it guarantees inclusion of that variable.
+    - If multiple variable exist, it randomly selects one to ensure diversity in expression structure.
 
-### Tree Generation 
 ```python
-def generate_subtree(
-    depth: int,
-    force_var: Optional[str] = None,  
-    constant_min=CONST_MIN,
-    constant_max=CONST_MAX
-) -> Node:
-    if depth <= 0:
-        if force_var is not None:
-            return Node(force_var)
-        elif random.random() < 0.5 and VARIABLES:
-            return Node(random.choice(VARIABLES))
-        else:
-            return Node(random.uniform(constant_min, constant_max))
-        
-    if random.random() < 0.3 and UNARY_FUNCS:
-        op = random.choice(UNARY_FUNCS)
-        child = generate_subtree(depth - 1, force_var, constant_min, constant_max)
-        return Node(op, [child])
-    else:
-        op = random.choice(BINARY_FUNCS)
-        left = generate_subtree(depth - 1, force_var, constant_min, constant_max)
-        right = generate_subtree(depth - 1, None, constant_min, constant_max)
-        return Node(op, [left, right])
+MAX_TREE_DEPTH = 8
+CONST_MIN = -10.0
+CONST_MAX = 10.0
 
-def generate_random_tree(
-        depth=DEPTH_MAX, 
+def create_subtree(
+    depth: int,
+    force_variable: Optional[str] = None,  
+    constant_min: float =CONST_MIN,
+    constant_max: float =CONST_MAX
+) -> TreeNode:
+    """
+    Generate recursively a subtree. If force_var is provided, it will be used as the root node.
+    If depth is 0, a leaf node will be created with either a variable or a random constant.
+    """
+    if depth <= 0:
+        if force_variable:
+            return TreeNode(force_variable)
+        elif VARIABLES and random.random() < 0.5:
+            return TreeNode(random.choice(VARIABLES))
+        else:
+            return TreeNode(random.uniform(constant_min, constant_max))
+        
+    if random.random() < 0.3 and UNARY_OPERATORS:
+        op = random.choices(
+            UNARY_OPERATORS,
+            weights=[f['weight'] for f in UNARY_OPERATORS],
+            k=1
+        )[0]['function']
+        child = create_subtree(depth - 1, force_variable, constant_min, constant_max)
+        return TreeNode(op, [child])
+    
+    else:
+        op = random.choices(
+            BINARY_OPERATORS,
+            weights=[f['weight'] for f in BINARY_OPERATORS],
+            k=1
+        )[0]['function']
+        left = create_subtree(depth - 1, force_variable, constant_min, constant_max)
+        right = create_subtree(depth - 1, None, constant_min, constant_max)
+        return TreeNode(op, [left, right])
+
+def generate_random_expression_tree(
+        depth=MAX_TREE_DEPTH, 
         constant_min=CONST_MIN, 
         constant_max=CONST_MAX
-) -> Node:
+) -> TreeNode:
+    """
+    Generate a tree which includes at least one of the available variables.
+    """
     if not VARIABLES:
         raise ValueError("There is no variable available.")
-    elif len(VARIABLES) == 1:
-        return generate_subtree(depth, force_var=VARIABLES[0], constant_min=constant_min, constant_max=constant_max)
-    else:
-        return generate_subtree(depth, force_var=random.choice(VARIABLES), constant_min=constant_min, constant_max=constant_max)
+    
+    selected_var = (
+        VARIABLES[0] if len(VARIABLES) == 1 else random.choice(VARIABLES)
+    )
+    return create_subtree(depth, force_variable=selected_var, constant_min=constant_min, constant_max=constant_max)
 ```
-To support symbolic regression, expression trees are randomly generated with a recursive structure.
-- `generate_subtree` creates a subtree with a specified depth:
-    - At depth 0, it generates either a constant or a variable. If `force_var` is specified, it forces the use of a particular variable at the leaf.
-    - At highet depths, it probabilistically chosees between unary and binary functions and recursively builds child nodes.
-- `generate_random_tree` generates a complete tree containing all required variables:
-    - In only one variable exists, it guarantees inclusion of that variable.
-    - If multiple variable are available, it randomly selects one to ensure diversity in expression structure.
 
 ### Expression String Representation
+The `expression_to_string(node)` function generates a human-readable string representation of a symbolic expression tree. 
+
+It uses the `FUNCTION_DISPLAY_NAMES` dictionary to map internal function references to standard mathematical symbols or name (e.g., `np.add` to `+`, `np.multiply` to `*`, `log_safe` to `log`, etc.).
+
+This function supports:
+- `Costants`: formatted with three decimal places.
+- `Variables`: represented using an index notation (e.g., `x0`, `x1`, ...)
+- `Operators`: represented using infix notation for binary operators (e.g., `x+y`, `x*y`) and functional notation for unary operators (e.g., `sin(x)`, `log(x)`)
+
 ```python
 log_safe = lambda x: np.where(x <= 0, 0.0, np.log(x))
 sqrt_safe = lambda x: np.sqrt(np.abs(x))
 exp_safe = lambda x: np.exp(np.clip(x, -700, 700))
 div_safe = lambda a, b: np.where(np.abs(b) < 1e-12, 1.0, a / b)
 
-DISPLAY_NAME_MAP = {
+FUNCTION_DISPLAY_NAMES = {
     id(np.add): '+', 
     id(np.subtract): '-', 
     id(np.multiply): '*', 
@@ -713,257 +801,262 @@ DISPLAY_NAME_MAP = {
     id(div_safe): '/',
 }
 
-def tree_to_string(node: Node) -> str:
+def expression_to_string(node: TreeNode) -> str:
+    """
+    It Returns a string representation of the tree node
+    """
     if node.is_leaf():
         val = node.value
         if isinstance(val, (float, int)) and not isinstance(val, bool):
             return f"{float(val):.3f}"
-        if isinstance(val, str):
-            idx = val[1]  
-            return f"x{idx}"
+        elif isinstance(val, str) and val.startswith('x'):
+            return val
         return str(val)
 
     op = node.value
-    op_name = DISPLAY_NAME_MAP.get(id(op), getattr(op, '__name__', str(op)))
-    child_strs = [tree_to_string(child) for child in node.children]
-    if len(child_strs) == 1:
-        return f"{op_name}({child_strs[0]})"
-    elif len(child_strs) == 2:
-        return f"({child_strs[0]} {op_name} {child_strs[1]})"
+    op_name = FUNCTION_DISPLAY_NAMES.get(id(op), getattr(op, '__name__', str(op)))
+    child_expressions = [expression_to_string(child) for child in node.children]
+    
+    if len(child_expressions) == 1:
+        return f"{op_name}({child_expressions[0]})"
+    elif len(child_expressions) == 2:
+        return f"({child_expressions[0]} {op_name} {child_expressions[1]})"
     else:
-        raise ValueError("Unsupported number of children")
+        raise ValueError(f"Unsupported number of children: {len(child_expressions)}")
 ```
-The `tree_to_string(node)` function generates a human-readable string representation of a symbolic expression tree. It uses the `DISPLAY_NAME_MAP` dictionary to translate internal function references into their symbolic counterparts (e.g., `np.add` -> `+`, `log_safe` -> `log`).
-This function supports:
-- `Costants`: formatted with three decimal places.
-- `Variables`: represented using an index notation (e.g., `x0`, `x1`, ...)
-- `Operators`: rendered in infix (binary) or functional (unary) form.
 
-### Conversion Functions 
+### GXGP Node Conversion Function
+These functions convert a symbolic expression tree represented by a custom `TreeNode` into the `GXNode` structure defined in the `gxgp` library.
+
+This conversion is necessary for the compatibility with external tools such as the `draw()` function.
+- `create_variable_function(var_name)`: creates a function that returns the value associated with the given variable name.
+- `create_constant_function(const_val)`: returns a function that always returns the specified constant value, regardless of input.
+- `convert_tree_ to_gxgp_node(node, collected_node=None)`: recursively converts a `TreeNode` object into a `GXNode` one preserving the original expression structure.
+The option `collected_node` parameter allows tracking of all created nodes, which may be useful for analysis or rendering purposes.
+
 ```python
-def make_var_func(var_name: str):
+def create_variable_function(var_name: str):
+    """
+    It creates a function that returns the value of a variable from the keyword arguments.
+    """
     def var_func(**kwargs):
         return kwargs[var_name]
     var_func.__name__ = var_name
     return var_func
 
-def make_const_func(const_val: float):
+def create_constant_function(const_val: float):
+    """
+    It creates a function that returns a constant value.
+    """
     def const_func(**kwargs):
         return const_val
     const_func.__name__ = f"{const_val:.3f}"
     return const_func
 
-def convert_to_gxgp_node(my_node, subtree=None) -> GXNode:
-    if subtree is None:
-        subtree = set()
+def convert_tree_to_gxgp_node(node: TreeNode, collected_nodes: Optional[Set[GXNode]]) -> GXNode:
+    """
+    It converts a custom TreeNode object to a GXNode object.
+    If `collected_nodes` is provided, it will be used to collect the nodes.
+    """    
+    if collected_nodes is None:
+        collected_nodes = set()
 
-    if my_node.is_leaf():
-        val = my_node.value
-        if isinstance(val, str):
-            var_func = make_var_func(val)
-            gx_node = GXNode(var_func, [], name=val)      
+    if node.is_leaf():
+        value = node.value
+
+        if isinstance(value, str):
+            var_func = create_variable_function(value)
+            gx_node = GXNode(var_func, [], name=value)      
         else:
-            const_func = make_const_func(float(val))
-            gx_node = GXNode(const_func, [], name=f"{float(val):.3f}") 
-        subtree.add(gx_node)
+            const_func = create_constant_function(float(value))
+            gx_node = GXNode(const_func, [], name=f"{float(value):.3f}") 
+        
+        collected_nodes.add(gx_node)
         return gx_node
     
+    op = node.value
+    op_name = FUNCTION_DISPLAY_NAMES.get(id(op), getattr(op, '__name__', str(op)))
     
-    op = my_node.value
-    converted_children = []
-    op_name = DISPLAY_NAME_MAP.get(id(op), getattr(op, '__name__', str(op)))
-    for child in my_node.children if my_node.children is not None else []:
-        converted_child = convert_to_gxgp_node(child, subtree)
-        converted_children.append(converted_child)
+    converted_children = [
+        convert_tree_to_gxgp_node(child, collected_nodes)
+        for child in (node.children or [])
+    ]
 
     gx_node = GXNode(op, converted_children, name=op_name)
-    subtree.add(gx_node)
+    collected_nodes.add(gx_node)
     return gx_node
 ```
-These functions convert a symbolic expression tree represented by a custom `Node` into the `GXNode` structure defined in the gxgp library. This is necessary for the compatibility with external tools such as the `draw()` function.
-- `make_var_func(var_name)`: creates a function that returns the value associated with the given variable name.
-- `make_const_func(const_val)`: returns a function that always returns the specified constant value, regardless of input.
-- `convert_to_gxgp_node(my_node, subtree=None)`: recursively converts a `Node` object into a `GXNode` preserving the original expression structure.
 
 ### Fitness Fuction
+The `evaluate_fitness(individual, x, y)` function evaluates the quality of a symbolic expression (represented as a `TreeNode`) by calculating the Mean Squared Error (MSE) between the predicted values `y_pred` and the actual target values `y`. 
+
+If the output contains invalid values (NaNs or infinities), the fitness is penalized with a large constant (`1e10`).
+
 ```python
-def fitness(individual: Node, x: np.ndarray, y: np.ndarray, penalty_factor: float = 0.001) -> float:
+def evaluate_fitness(individual: TreeNode, x: np.ndarray, y: np.ndarray, penalty_factor: float = 0.001) -> float:
+    """
+    It calculates the fitness of an individual based on Mean Square Error (MSE). 
+    """
     try:
-        y_pred = evaluate_children(individual, x)
+        y_pred = evaluate_node(individual, x)
+
         if not np.all(np.isfinite(y_pred)):
             return 1e10 
+        
         mse = np.mean((y - y_pred) ** 2)
-        complexity_penalty = penalty_factor * len(get_all_nodes(individual))
-        return mse 
+        return mse
     
     except Exception as e:
         return 1e10 
 ```
-- `fitness(individual, x, y)`: evaluates the quality of a symbolic expression (represented as a tree) by calculating the Mean Squared Error (MSE) between the predicted values `y_pred` and the actual target values `y`. If the output contains invalid values (NaNs or infinities), the fitness is penalized with a large constant (`1e10`).
 
 ### Selection Function
-```python
-def tournament_selection(population, x, y, k=3):
-    if len(population) < k:
-        contenders = population
-    else:
-        contenders = random.sample(population, k)
-    best = min(contenders, key=lambda ind: fitness(ind, x, y))
-    return best
-```
-- `tournament_selection(population, x, y, k=3)`: selects the best individual from a randomly chosen group of k candidates from the the population. This stochastic selection method promotes fitter individuals while preserving diversity.
+The `tournament_selection(population, x, y, k=3)` function selects the best individual from a randomly chosen group of `k` candidates from the the population. 
 
-### Crossover Function
+This stochastic selection method promotes fitter individuals while preserving diversity.
+
 ```python
-def crossover(parent1: Node, parent2: Node) -> Node:
-    child1 = clone_tree(parent1)
-    child2 = clone_tree(parent2)
+def tournament_selection(population: List[TreeNode], x: np.ndarray, y: np.ndarray, k=3) -> TreeNode:
+    """
+    It returns the best individual from a random subset of the population (a random tournament).
+    """
+    contenders = random.sample(population, k) if len(population) >= k else population
+    best_individual = min(contenders, key=lambda ind: evaluate_fitness(ind, x, y))
+    return best_individual
+```
+
+### Crossover Functions
+The `crossover(parent1, parent2)` function combines two parent expression trees by selecting random internal nodes (non-leaf nodes) from each and swapping their subtrees. 
+
+This allows the creation of offspring that inherit structural traits from both parents.
+
+- **Helper Functions**: 
+    - `collect_all_nodes(tree)`: recursively returns a list of all nodes in the tree.
+    - `select_random_node(tree)`: selects a random node from the tree (internal or leaf).
+    - `clone_expression_tree(node)`: creates a deep copy of the tree.
+
+```python
+def crossover(parent1: TreeNode, parent2: TreeNode) -> TreeNode:
+    """
+    Crossover between two parents by swapping two internal subtrees.
+    """
+    offspring1 = clone_expression_tree(parent1)
+    offspring2 = clone_expression_tree(parent2)
     
-    internal_nodes1 = [node for node in get_all_nodes(child1) if not node.is_leaf()]
-    internal_nodes2 = [node for node in get_all_nodes(child2) if not node.is_leaf()]
+    internal_nodes1 = [node for node in collect_all_nodes(offspring1) if not node.is_leaf()]
+    internal_nodes2 = [node for node in collect_all_nodes(offspring2) if not node.is_leaf()]
     
     if internal_nodes1 and internal_nodes2:
         node1 = random.choice(internal_nodes1)
         node2 = random.choice(internal_nodes2)
+        node1.value, node1.children, node2.value, node2.children = (
+            node2.value, node2.children, node1.value, node1.children
+        )
     
-        node1.value, node1.children, node2.value, node2.children = node2.value, node2.children, node1.value, node1.children
-    
-    return child1
+    return offspring1
 
 
-def get_random_node(tree: Node) -> Node:
-    all_nodes = get_all_nodes(tree)
+def select_random_node(tree: TreeNode) -> TreeNode:
+    """
+    It returns a random node from the specified tree.
+    """
+    all_nodes = collect_all_nodes(tree)
     return random.choice(all_nodes)
 
-def get_all_nodes(tree: Node) -> list:
+def collect_all_nodes(tree: TreeNode) -> List[TreeNode]:
+    """
+    It returns a list with all the nodes of the tree.
+    """
     nodes = [tree]
-    for c in tree.children:
-        nodes += get_all_nodes(c)
+    for child in tree.children:
+        nodes.extend(collect_all_nodes(child))
     return nodes
 
-def clone_tree(node: Node) -> Node:
-    new_node = Node(node.value)
-    new_node.children = [clone_tree(c) for c in node.children]
-    return new_node
-
+def clone_expression_tree(node: TreeNode) -> TreeNode:
+    """
+    It creates a deep copy of the tree.
+    """
+    copied_node = TreeNode(node.value)
+    copied_node.children = [clone_expression_tree(child) for child in node.children]
+    return copied_node
 ```
-- `crossover(parent1, parent2)`: combines two parent expression trees by selecting random internal nodes (non-leaf nodes) from each and swapping their subtrees. This allows the creation of offspring that inherit structural traits from both parents.
-- **Helper Functions**: 
-    - `get_all_nodes(tree)`: recursively returns a list of all nodes in the tree.
-    - `get_random_node(tree)`: selects a random node from the tree.
 
 ### Mutation Functions
+- The `subtree_mutation(individual, mutation_rate = 0.4)` function applies mutation to a cloned copy of the individual with a probability defined by `mutation_rate`. 
+    - If an internal node (i.e., an operator) is selected, it's replaced by a new randomly generated subtree.
+    - If a leaf node (i.e., a variable or constant) is selected, it is mutated into either a new variable (randomly selected from `VARIABLES`) or into a new random constant.
+
+- The `hoist_mutation(individual)` function selects a random internal subtree within the individual and promotes it to become the new root. This encourages expressions simplification and structural diversity in the population. If the individual contains no internal subtree, it simply returns an unchanged clone.
+
 ```python
-def mutation(individual: Node, mutation_rate=0.4) -> Node:
-    mutant = clone_tree(individual)
+def subtree_mutation(individual: TreeNode, mutation_rate: float = 0.4) -> TreeNode:
+    """
+    With a certain probability it mutates a node of the tree.
+    """
+    mutant = clone_expression_tree(individual)
+
     if random.random() < mutation_rate:
-        internal_nodes = [node for node in get_all_nodes(mutant) if not node.is_leaf()]
-        leaf_nodes = [node for node in get_all_nodes(mutant) if node.is_leaf()]
+        internal_nodes = [node for node in collect_all_nodes(mutant) if not node.is_leaf()]
+        leaf_nodes = [node for node in collect_all_nodes(mutant) if node.is_leaf()]
         
         if internal_nodes and (not leaf_nodes or random.random() < 0.5):
             
-            node_to_mutate = random.choice(internal_nodes)
-            new_subtree = generate_random_tree(depth=DEPTH_MAX, constant_min=CONST_MIN, constant_max=CONST_MAX)
-            node_to_mutate.value = new_subtree.value
-            node_to_mutate.children = new_subtree.children
+            target_node = random.choice(internal_nodes)
+            new_subtree = generate_random_expression_tree(
+                depth=MAX_TREE_DEPTH, 
+                constant_min=CONST_MIN, 
+                constant_max=CONST_MAX
+            )
+            target_node.value = new_subtree.value
+            target_node.children = new_subtree.children
+        
         elif leaf_nodes:
-            node_to_mutate = random.choice(leaf_nodes)
-            if random.random() < 0.5:
-                new_var = random.choice(VARIABLES)
-                node_to_mutate.value = new_var
+            target_node = random.choice(leaf_nodes)
+            if random.random() < 0.5 and VARIABLES:
+                target_node.value = random.choice(VARIABLES)
             else:
-                node_to_mutate.value = random.uniform(CONST_MIN, CONST_MAX)
-                node_to_mutate.children = []
+                target_node.value = random.uniform(CONST_MIN, CONST_MAX)
+                target_node.children = []
     
     return mutant
 
-def hoist_mutation(individual: Node) -> Node:
-    all_nodes = get_all_nodes(individual)
-    subtrees = [n for n in all_nodes if not n.is_leaf()]
+def hoist_mutation(individual: TreeNode) -> TreeNode:
+    """
+    Performs hoist mutation by replacing the individual with a randomly chosen subtree.
+    """
+    candidate_subtrees = [n for n in collect_all_nodes(individual) if not n.is_leaf()]
 
-    if not subtrees:
-        return clone_tree(individual)
-    return clone_tree(random.choice(subtrees))
+    if not candidate_subtrees:
+        return clone_expression_tree(individual)
+
+    return clone_expression_tree(random.choice(candidate_subtrees))
 ```
-- `mutation(individual, mutation_rate = 0.4)`: with a probability defined by `mutation_rate`, a mutation is performed on the cloned individual. 
-    - If an internal node is selected, it's replaced by a new randomly generated subtree.
-    - If a leaf node is selected, it's mutated into either a new variable (randomly selected from `VARIABLES`) or a new constant.
-- `hoist_mutation(individual)`: selects a random internal subtree within the individual and promotes it to become the new root. This encourages simplification and structural variation in the population. If no internal subtree exists, a clone of the original tree is returned unchanged.
 
 ### Depth Tree Control
+The `enforce_tree_depth_limit(node, max_depth=3, current_depth=0)` ensures that expression trees don't exceed a predefined maximum depth. 
+
+If a node exceeds the maximum allowed depth, it is converted into a leaf node, either by assigning it a variable (from `VARIABLES`) or a random constant value. 
+
 ```python
-def enforce_max_depth(node: Node, max_depth: int = 3, current_depth: int = 0):
+def enforce_tree_depth_limit(node: TreeNode, max_depth: int = 3, current_depth: int = 0) -> None:
+    """It reduces the depth of the tree to a maximum depth."""
     if current_depth >= max_depth:
         if VARIABLES:
-            node.value = random.choice(VARIABLES + [random.uniform(CONST_MIN, CONST_MAX)])
+            replacement = random.choice(VARIABLES + [random.uniform(CONST_MIN, CONST_MAX)])
         else:
-            node.value = random.uniform(CONST_MIN, CONST_MAX)
+            replacement = random.uniform(CONST_MIN, CONST_MAX)
+        
+        node.value = replacement
         node.children = []
     else:
         for c in node.children:
-            enforce_max_depth(c, max_depth, current_depth+1)
-
+            enforce_tree_depth_limit(c, max_depth, current_depth + 1)
 ```
-- `enforce_max_depth(node, max_depth=3, current_depth=0)`: ensures that expression trees don't exceed a predefined maximum depth. If a node exceeds the maximum allowed depth, it is converted into a leaf node, either by assigning it a variable (from `VARIABLES`) or a random constant value. 
 
 ### Genetic Programming Algorithm
-```python
-def run_genetic_programming(x: np.ndarray, y: np.ndarray,
-                            population_size=50000,
-                            generations=200,
-                            elite_size=2,
-                            max_depth=6):
+The `run_genetic_programming(x, y, population_size, generations, elite_size, max_depth)` function evolves symbolic expressions that approximate a target function based on input data `x` and expected output `y`. 
 
-    population = []
-    half_pop = population_size // 2
-    for i in range(half_pop):
-        tree = generate_random_tree(depth=2)
-        enforce_max_depth(tree, max_depth=max_depth)
-        population.append(tree)
-
-    for i in range(population_size - half_pop):
-        tree = generate_random_tree(depth=4)
-        enforce_max_depth(tree, max_depth=max_depth)
-        population.append(tree)
-    
-    best_overall = None
-    best_fitness = float('inf')
-    
-    hall_of_fame = []  
-
-    for g in range(generations):
-        scored_pop = [(ind, fitness(ind, x, y)) for ind in population]
-        scored_pop.sort(key=lambda x: x[1]) 
-        
-        best_current, best_current_fit = scored_pop[0]
-      
-        if best_current_fit < best_fitness:
-            best_overall = clone_tree(best_current)
-            best_fitness = best_current_fit
-        
-        best_str = tree_to_string(best_current)
-        print(f"[Gen {g}] Best MSE: {best_current_fit:.40f} => {best_str}")
-        
-        hall_of_fame.append((clone_tree(best_current), best_current_fit))
-        
-        new_population = [ind for ind, fit in scored_pop[:elite_size]]
-        
-        while len(new_population) < population_size:
-            p1 = tournament_selection(population, x, y, k=3)
-            p2 = tournament_selection(population, x, y, k=3)
-            offspring = crossover(p1, p2)
-            if random.random() < 0.10:
-                offspring = hoist_mutation(offspring)
-            else:
-                offspring = mutation(offspring)
-            enforce_max_depth(offspring, max_depth=max_depth)
-            new_population.append(offspring)
-        
-        population = new_population
-    
-    return best_overall, best_fitness, hall_of_fame
-```
-- `run_genetic_programming(x, y, population_size, generations, elite_size, max_depth)`: implements a Genetic Programming (GP) algorithm to evolve symbolic expressions that approximate a target function based on input data `x` and expected output `y`. This evolutionary process iteratively improves a population of candidate expression trees over a number of generations, aiming to minimize the Mean Squared Error (MSE)between predicted and true outputs.
+This evolutionary process iteratively improves a population of candidate expression trees over a number of generations, aiming to minimize the Mean Squared Error (MSE) between predicted and true outputs.
 
 These are the main steps:
 1. **Population Inizialization**
@@ -973,7 +1066,7 @@ The initial population is created using a balanced approach:
 
 2. **Fitness Evaluation**
 At each generation:
-    - Every individual in the population is evaluated using the `fitness()` function, which computes the MSE between the predicted values and actual outputs.
+    - Every individual in the population is evaluated using the `evaluate_fitness()` function, which computes the MSE between the predicted values and actual outputs.
     - The population is then sorted by fitness, in ascending order (lower MSE is better).
 
 3. **Elitism and Hall of Fame**
@@ -986,12 +1079,12 @@ New parents are selected using tournament selection.
     - For each offspring, two parents are chosen independently via `tournament_selection()`, where 3 random individuals compete and the one with lowest MSE is selected.
 
 5. **Crossover and Variation**
-    - A crossover operation `crossover(parent1, parent2)` is performed between the two selected parents to produce an offspring by swapping random subtrees.
+    - A crossover operation is performed between the two selected parents to produce an offspring by swapping random subtrees.
     - With 10% probability, the offspring undergoes hoist mutation, which replaces the individual with one of its own subtrees to promote simplification.
     - Otherwise, the offspring undergoes standard mutation, altering internal or leaf nodes probabilistically.
 
 6. **Depth Enforcement**
-Each new offspring is checked and pruned if necessary using `enforce_max_depth()` to ensure that the final tree doesn't exceed `max_depth`.
+Each new offspring is checked and pruned if necessary using `enforce_tree_depth_limit()` to ensure that the final tree doesn't exceed `max_depth`.
 
 7. **Population Update**
 The newly generated invididuals (offspring and elites) from the population for the next generation. This process repeats for the total number of `generations`.
@@ -1001,6 +1094,66 @@ At the end of the evolutionary process, the function returns:
     - `best_overall`: the best-performing individual across all generations.
     - `best_fitness`: its associated MSE.
     - `hall_of_fame`: a list of the best individual from each generation, useful for tracking progress over time.
+
+```python
+def run_genetic_programming(x: np.ndarray, y: np.ndarray, population_size: int = 50000, generations: int = 200, elite_size: int = 2, max_depth: int = 6) -> Tuple[TreeNode, float, List[Tuple[TreeNode, float]]]:
+    """
+    It executes the genetic programming algorithm.
+    
+    Returns:
+        - the best individual found,
+        - its fitness value,
+        - the hall of fame (best for each generation)
+    """
+    population: List[TreeNode] = []
+
+    for i in range(population_size // 2):
+        tree = generate_random_expression_tree(depth=2)
+        enforce_tree_depth_limit(tree, max_depth=max_depth)
+        population.append(tree)
+
+    for i in range(population_size - len(population)):
+        tree = generate_random_expression_tree(depth=4)
+        enforce_tree_depth_limit(tree, max_depth=max_depth)
+        population.append(tree)
+    
+    best_overall: TreeNode = None
+    best_fitness: float = float('inf')
+    hall_of_fame: List[Tuple[TreeNode, float]] = []  
+
+    for generation in range(generations):
+        evaluated = [(individual, evaluate_fitness(individual, x, y)) for individual in population]
+        evaluated.sort(key=lambda x: x[1]) 
+        
+        best_current, current_fitness = evaluated[0]
+      
+        if current_fitness < best_fitness:
+            best_overall = clone_expression_tree(best_current)
+            best_fitness = current_fitness
+        
+        best_str = expression_to_string(best_current)
+        print(f"[Generazione {generation}] Best MSE: {current_fitness:.40f} => {best_str}")
+        
+        hall_of_fame.append((clone_expression_tree(best_current), current_fitness))
+        
+        new_population: List[TreeNode] = [ind for ind, _ in evaluated[:elite_size]]
+        
+        while len(new_population) < population_size:
+            parent1 = tournament_selection(population, x, y, k=3)
+            parent2 = tournament_selection(population, x, y, k=3)
+            offspring = crossover(parent1, parent2)
+
+            if random.random() < 0.10:
+                offspring = hoist_mutation(offspring)
+            else:
+                offspring = subtree_mutation(offspring)
+            enforce_tree_depth_limit(offspring, max_depth=max_depth)
+            new_population.append(offspring)
+        
+        population = new_population
+    
+    return best_overall, best_fitness, hall_of_fame
+```
 ### Problem 1
 
 #### Training Results
@@ -1024,7 +1177,7 @@ At the end of the evolutionary process, the function returns:
 **Selected Tree (Best Individual)**
 | Population | Generations | Elite |  Best Expression | MSE |
 |------------|-------------|-------|------------------|-----|
-| 50000       | 100         | 4    | sin(x0)  |    7.125940794232773e-34   | 
+| 50000       | 100         | 4    | (sin(x0) + (x0-x0))  |    7.125940794232773e-34   | 
 
 ![Tree](report_images_sergio/lab4/test/problem_1/tree_pop50000_gen100_elite4.png)
 
@@ -1075,9 +1228,10 @@ At the end of the evolutionary process, the function returns:
 
 #### Test Results
 **Selected Tree (Best Individual)**
-| Population | Generations | Elite |  Best Expression | MSE |
+| Population | Generations | Elite | Best Expression | MSE |
 |------------|-------------|-------|------------------|-----|
-| 10000       | 200         | 4     | (x2 / 9.142) + (sqrt(-9.933 - 5.874) + (x0 * x0) + ((-x1 * (x1 * x1)) + ((x0 * x0) - (3.600 * x2))))  |    0.0013999023834780082   | 
+| 10000      | 199         | 4     | sin((((x2 - x2) / (((log(abs(x1)) - (x1 * x2)) / ((-9.103 - x2) * ((x2 / x1) + abs(x0))))) + cos(6.457))) + ((x0 * x0) + ((x2 * -2.504) + ((x0 * x2) * (x0 / x2)) + (((x1 * x1) * (-x1)) - (-3.167 + x2))))) | 0.0001337986105768977 |
+
 
 ![Tree](report_images_sergio/lab4/test/problem_3/tree_pop10000_gen200_elite4.png)
 
@@ -1104,7 +1258,7 @@ At the end of the evolutionary process, the function returns:
 **Selected Tree (Best Individual)**
 | Population | Generations | Elite |  Best Expression | MSE |
 |------------|-------------|-------|------------------|-----|
-| 50000       | 200         | 4     | ((x0 / -9.239) / ((x0 * 8.815) / (x0 / x0)) + ((x0 / -1.188) / abs(9.368)) + ((cos(x1) * abs(7.003)) + (-6.538 * -0.504)))  |1.4950615164745926e-05   |
+| 50000       | 200         | 4     | ((x0 / -9.239) / ((x0 * 8.815) / (x0 / x0)) + ((x0 / -1.188) / abs(9.368)) + ((cos(x1) * abs(7.003)) + (-6.538 * -0.504)))  |1.495061516474593e-05   |
 
 ![Tree](report_images_sergio/lab4/test/problem_4/tree_pop50000_gen200_elite4.png)
 
@@ -1152,13 +1306,14 @@ At the end of the evolutionary process, the function returns:
 | 50 000     | 100         | 2     | ![Tree](report_images_sergio/lab4/training/problem_6/tree_pop50000_gen100_elite2.png) | ((4.714 * x0) / ((exp(-7.926) - (x0 / -0.009)) / (x1 + x0))) + ((x0 / -1.366) + (1.654 * x1)) | 5.173764848659719e-05 |
 | 50 000     | 100         | 4     | ![Tree](report_images_sergio/lab4/training/problem_6/tree_pop50000_gen100_elite4.png) | ((x1 / 0.581) + (-0.688 * x0) - ((x1 / 0.581) / ((x0 * x0) - (-7.502 * 7.414)))) - ((x0 - x0) * ((x0 - x0) - (((x0 / x1) + (x1 * -5.253)) - ((x0 / x1) + (-8.729 / x1))))) | 0.00023849185688837437 |
 | 50 000     | 200         | 2     | ![Tree](report_images_sergio/lab4/training/problem_6/tree_pop50000_gen200_elite2.png) | ((sin(2.380) * log(sin(log(5.130)))) * ((x1 * 1.697) + (sin(2.380) * -x0))) + ((x1 * 1.697) + (sin(2.400) * (-1.030 * x0))) | 2.780662271513063e-07 |
-| 50 000     | 200         | 4     | ![Tree](report_images_sergio/lab4/training/problem_6/tree_pop50000_gen200_elite4.png) | ((x1 - x0) + (x1 * 0.694) + (x0 / 3.275)) + (((sin(sqrt(x0)) + (log(x1) * (x1 * x1))) / ((log(x1) - sin(x0)) - (-9.735 - (x0 * x0)))) / (((x1 * -6.370 + (x1 / 2.122)) * exp(x1 + 8.682)) / (((x1 * 6.287) + (x0 - x0)) + ((x1 + x0) - (x1 - x0))))) | 1.3999239334919753e-07 |
+| 50 000     | 200         | 4     | ![Tree](report_images_sergio/lab4/training/problem_6/tree_pop50000_gen200_elite4.png) | ((x1 - x0) + (x1 * 0.694) + (x0 / 3.275)) + (((sin(sqrt(x0)) + (log(x1) * (x1 * x1))) / ((log(x1) - sin(x0)) - (-9.735 - (x0 * x0)))) / (((x1 * -6.370 + (x1 / 2.122)) * exp(x1 + 8.682)) / (((x1 * 6.287) + (x0 - x0)) + ((x1 + x0) - (x1 - x0))))) | 1.399923933491975e-07 |
 
 #### Test Results
 **Selected Tree (Best Individual)**
 | Population | Generations | Elite | Best Expression | MSE |
 |------------|-------------|-------|------------------|-----|
-| 50000      | 200         | 4     | ((((x0 * -0.695) + (1.647 * x1)) - (1.647 * x1) / ((-4.338 * 9.012) - (-4.442))) - ((x0 / -5.559) / ((-4.338 * 9.012) - (-4.442))) / ((((x1 - x1) * (x1 * x1)) * ((-x0) + (x0 * 7.529))) - (((x1 + x1) + (9.243 * 3.343)) - ((x1 - x0) - (x1 * x1))))) | 3.58180288081783e-08 |
+| 50000      | 200         | 4     | ((((((x0 - 0.198) + ((9.979 * -4.804) * (x1 + x0))) - (x0 / -1.434)) + (-9.896 * x1)) / ((((x0 - x1) * (x0 / -1.434)) / (((-1.538 + x1) * exp(x0) - sin(x0 * x1)) + exp(9.682))) + (((x0 - x0) + log((x0 - x1) + (x1 / x0))) - ((sin(x1 + x0) + exp(9.682)) - (((8.148 - 7.531) + (-9.831 * -7.634)) - ((x0 + x0) - (x0 + 1.343)))))) + ((x0 / -1.434) + (x1 * 1.691)))) | 8.251367834469018e-11 |
+
 
 ![Tree](report_images_sergio/lab4/test/problem_6/tree_pop50000_gen200_elite4.png) 
 
@@ -1185,7 +1340,7 @@ At the end of the evolutionary process, the function returns:
 **Selected Tree (Best Individual)**
 | Population | Generations | Elite |  Best Expression | MSE |
 |------------|-------------|-------|------------------|-----|
-| 50000       | 200         | 2     | (abs(log(abs((x1 - x0) * abs(x0)))) * ((((x1 * x0) + (abs(x0) + (x0 * x0))) + (x1 * x0)) + exp((3.473 - 2.375) + (x1 * x0))))  | 50.19040470784147  |
+| 50000       | 200         | 2     | (abs(log(abs((x1 - x0) * abs(x0)))) * ((((x1 * x0) + (abs(x0) + (x0 * x0))) + (x1 * x0)) + exp((3.473 - 2.375) + (x1 * x0))))  | 50.190404707841470  |
 
 ![Tree](report_images_sergio/lab4/test/problem_7/tree_pop50000_gen200_elite2.png)
 
